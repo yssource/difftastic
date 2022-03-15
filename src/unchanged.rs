@@ -10,7 +10,13 @@ pub fn mark_unchanged<'a>(
     rhs_nodes: &[&'a Syntax<'a>],
 ) -> Vec<(Vec<&'a Syntax<'a>>, Vec<&'a Syntax<'a>>)> {
     let (_, lhs_nodes, rhs_nodes) = shrink_unchanged_at_ends(lhs_nodes, rhs_nodes);
-    split_unchanged(&lhs_nodes, &rhs_nodes)
+
+    let mut res = vec![];
+    for (lhs_nodes, rhs_nodes) in split_mostly_unchanged_toplevel(&lhs_nodes, &rhs_nodes) {
+        res.extend(split_unchanged(&lhs_nodes, &rhs_nodes));
+    }
+
+    res
 }
 
 #[derive(Debug)]
@@ -101,6 +107,90 @@ fn split_unchanged_singleton_list<'a>(
             ));
         }
     }
+
+    res
+}
+
+fn is_mostly_unchanged_list(lhs: &Syntax, rhs: &Syntax) -> bool {
+    match (lhs, rhs) {
+        (
+            Syntax::List {
+                open_content: lhs_open_content,
+                close_content: lhs_close_content,
+                children: lhs_children,
+                ..
+            },
+            Syntax::List {
+                open_content: rhs_open_content,
+                close_content: rhs_close_content,
+                children: rhs_children,
+                ..
+            },
+        ) if lhs_open_content == rhs_open_content && lhs_close_content == rhs_close_content => {
+            if lhs_children.len() < 4 || rhs_children.len() < 4 {
+                return false;
+            }
+
+            let first_children_unchanged = lhs_children
+                .iter()
+                .zip(rhs_children.iter())
+                .take(4)
+                .all(|(lhs, rhs)| lhs.content_id() == rhs.content_id());
+
+            let last_children_unchanged = lhs_children
+                .iter()
+                .rev()
+                .zip(rhs_children.iter().rev())
+                .take(4)
+                .all(|(lhs, rhs)| lhs.content_id() == rhs.content_id());
+
+            first_children_unchanged || last_children_unchanged
+        }
+        _ => false,
+    }
+}
+
+fn split_mostly_unchanged_toplevel<'a>(
+    lhs_nodes: &[&'a Syntax<'a>],
+    rhs_nodes: &[&'a Syntax<'a>],
+) -> Vec<(Vec<&'a Syntax<'a>>, Vec<&'a Syntax<'a>>)> {
+    let mut lhs_nodes = lhs_nodes;
+    let mut rhs_nodes = rhs_nodes;
+
+    let mut leading: Vec<(Vec<&'a Syntax<'a>>, Vec<&'a Syntax<'a>>)> = vec![];
+    while let (Some(lhs), Some(rhs)) = (lhs_nodes.first(), rhs_nodes.first()) {
+        // We don't consider TINY_TREE_THRESHOLD here because we are
+        // only considering equal nodes at the beginning or end of the
+        // file. There's no risk we split unrelated regions with a
+        // trivial unchanged node in the middle.
+        if is_mostly_unchanged_list(lhs, rhs) {
+            leading.push((vec![lhs], vec![rhs]));
+
+            lhs_nodes = &lhs_nodes[1..];
+            rhs_nodes = &rhs_nodes[1..];
+        } else {
+            break;
+        }
+    }
+
+    let mut trailing: Vec<(Vec<&'a Syntax<'a>>, Vec<&'a Syntax<'a>>)> = vec![];
+    while let (Some(lhs), Some(rhs)) = (lhs_nodes.last(), rhs_nodes.last()) {
+        if is_mostly_unchanged_list(lhs, rhs) {
+            trailing.push((vec![lhs], vec![rhs]));
+
+            lhs_nodes = &lhs_nodes[1..];
+            rhs_nodes = &rhs_nodes[1..];
+        } else {
+            break;
+        }
+    }
+
+    let mut res: Vec<(Vec<&'a Syntax<'a>>, Vec<&'a Syntax<'a>>)> = vec![];
+    res.extend_from_slice(&leading[..]);
+
+    res.push((Vec::from(lhs_nodes), Vec::from(rhs_nodes)));
+
+    res.extend(trailing.into_iter().rev());
 
     res
 }
