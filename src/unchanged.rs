@@ -178,8 +178,8 @@ fn split_mostly_unchanged_toplevel<'a>(
         if is_mostly_unchanged_list(lhs, rhs) {
             trailing.push((vec![lhs], vec![rhs]));
 
-            lhs_nodes = &lhs_nodes[1..];
-            rhs_nodes = &rhs_nodes[1..];
+            lhs_nodes = &lhs_nodes[..lhs_nodes.len() - 1];
+            rhs_nodes = &rhs_nodes[..rhs_nodes.len() - 1];
         } else {
             break;
         }
