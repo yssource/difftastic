@@ -3,17 +3,64 @@ use crate::syntax::{ChangeKind, Syntax};
 
 const TINY_TREE_THRESHOLD: u32 = 10;
 
+/// What is the total number of AST nodes?
+fn node_count(root: &Syntax) -> u32 {
+    let mut node = Some(root);
+    let mut count = 0;
+    while let Some(current_node) = node {
+        let current_count = match current_node {
+            Syntax::List {
+                num_descendants, ..
+            } => *num_descendants,
+            Syntax::Atom { .. } => 1,
+        };
+        count += current_count;
+
+        node = current_node.next_sibling();
+    }
+
+    count
+}
+
+fn nodes_count(roots: &[&Syntax]) -> u32 {
+    roots.iter().map(|n| node_count(n)).sum()
+}
+
 /// Set ChangeKind on nodes that are obviously unchanged, and return a
 /// vec of pairs that need proper diffing.
 pub fn mark_unchanged<'a>(
     lhs_nodes: &[&'a Syntax<'a>],
     rhs_nodes: &[&'a Syntax<'a>],
 ) -> Vec<(Vec<&'a Syntax<'a>>, Vec<&'a Syntax<'a>>)> {
+    warn!(
+        "Start node count: LHS {} RHS {}",
+        nodes_count(lhs_nodes),
+        nodes_count(rhs_nodes)
+    );
     let (_, lhs_nodes, rhs_nodes) = shrink_unchanged_at_ends(lhs_nodes, rhs_nodes);
+    warn!(
+        "After shrink node count: LHS {} RHS {}",
+        nodes_count(&lhs_nodes),
+        nodes_count(&rhs_nodes)
+    );
 
     let mut res = vec![];
     for (lhs_nodes, rhs_nodes) in split_mostly_unchanged_toplevel(&lhs_nodes, &rhs_nodes) {
-        res.extend(split_unchanged(&lhs_nodes, &rhs_nodes));
+        warn!(
+            "After split toplevel node count: LHS {} (len {}) RHS {} (len {})",
+            nodes_count(&lhs_nodes),
+            lhs_nodes.len(),
+            nodes_count(&rhs_nodes),
+            rhs_nodes.len()
+        );
+        for (lhs_nodes, rhs_nodes) in split_unchanged(&lhs_nodes, &rhs_nodes) {
+            warn!(
+                "After split inner node count: LHS {} RHS {}",
+                nodes_count(&lhs_nodes),
+                nodes_count(&rhs_nodes)
+            );
+            res.push((lhs_nodes, rhs_nodes));
+        }
     }
 
     res
@@ -194,6 +241,8 @@ fn split_mostly_unchanged_toplevel<'a>(
 
     res
 }
+
+
 
 /// Mark top-level nodes as unchanged if they have exactly the same
 /// content on both sides.
