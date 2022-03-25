@@ -143,7 +143,9 @@ fn split_unchanged_toplevel<'a>(
                     Syntax::List {
                         num_descendants, ..
                     } => *num_descendants < size_threshold,
-                    Syntax::Atom { .. } => true,
+                    Syntax::Atom { .. } => {
+                        lhs_node.previous_sibling().is_some() && lhs_node.next_sibling().is_some()
+                    }
                 };
 
                 if tiny_node {

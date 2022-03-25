@@ -273,6 +273,10 @@ impl<'a> Syntax<'a> {
         self.info().parent.get()
     }
 
+    pub fn previous_sibling(&self) -> Option<&'a Syntax<'a>> {
+        self.info().previous_sibling.get()
+    }
+
     pub fn next_sibling(&self) -> Option<&'a Syntax<'a>> {
         self.info().next_sibling.get()
     }
